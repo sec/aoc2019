@@ -10,9 +10,12 @@ namespace aoc2019.Code
     {
         class Map
         {
+            bool USE_SECOND_VERSION = false;
+
             char[,] _map;
             List<(int x, int y)> _starts;
             Dictionary<(int x, int y, string keys), int> _cache;
+            List<char> _allKeys;
 
             readonly int _width, _height;
 
@@ -22,7 +25,7 @@ namespace aoc2019.Code
                 _width = lines[0].Length;
                 _height = lines.Length;
                 _starts = new List<(int x, int y)>();
-
+                _allKeys = new List<char>();
                 _map = new char[_height, _width];
 
                 for (var y = 0; y < _height; y++)
@@ -35,19 +38,22 @@ namespace aoc2019.Code
                         {
                             _starts.Add((x, y));
                         }
+                        if (char.IsLower(c))
+                        {
+                            _allKeys.Add(c);
+                        }
                     }
                 }
             }
 
-            static IEnumerable<(int x, int y)> GetNextMove(int x, int y)
-            {
-                yield return (x - 1, y);
-                yield return (x + 1, y);
-                yield return (x, y - 1);
-                yield return (x, y + 1);
-            }
-
-            Dictionary<char, (int x, int y, int level)> WalkNext((int x, int y) start, string keysCollected)
+            #region Part 1
+            /// <summary>
+            /// 
+            /// </summary>
+            /// <param name="start"></param>
+            /// <param name="keysCollected"></param>
+            /// <returns></returns>
+            Dictionary<char, (int x, int y, int level)> CollectNext((int x, int y) start, string keysCollected)
             {
                 var keys = new Dictionary<char, (int x, int y, int level)>();
                 var dist = new Dictionary<(int x, int y), int>();
@@ -60,7 +66,7 @@ namespace aoc2019.Code
                 {
                     var current = q.Dequeue();
 
-                    foreach (var move in GetNextMove(current.x, current.y))
+                    foreach (var move in Ext.GetNextMove(current.x, current.y))
                     {
                         var c = _map[move.y, move.x];
 
@@ -101,23 +107,149 @@ namespace aoc2019.Code
                 }
 
                 var steps = 0;
-                var whatnext = WalkNext(start, sorted);
+                var whatnext = CollectNext(start, sorted);
                 if (whatnext.Any())
                 {
-                    var something = new List<int>();
+                    steps = int.MaxValue;
                     foreach (var item in whatnext)
                     {
-                        something.Add(item.Value.level + Solve((item.Value.x, item.Value.y), $"{sorted}{item.Key}"));
+                        var d = (item.Value.level + Solve((item.Value.x, item.Value.y), $"{sorted}{item.Key}"));
+                        steps = Math.Min(d, steps);
                     }
-                    steps = something.Min();
                 }
                 _cache[(start.x, start.y, sorted)] = steps;
 
                 return steps;
             }
+            #endregion
 
-            internal int Solve1() => Solve(_starts.First(), string.Empty);
+            #region Part 1 - Second version
+            /// <summary>
+            /// Travel around maze and collect keys
+            /// </summary>
+            /// <param name="start">Start point</param>
+            /// <param name="keys">List of keys we need to collect</param>
+            /// <returns>List of collected keys + coords</returns>
+            Dictionary<char, (int x, int y)> WalkAndCollect((int x, int y) start, List<char> keys)
+            {
+                var k = new Dictionary<char, (int x, int y)>();
+                var flag = new HashSet<(int x, int y)>();
+                var q = new Queue<(int x, int y)>();
 
+                flag.Add(start);
+                q.Enqueue(start);
+
+                while (q.Count > 0)
+                {
+                    var (x, y) = q.Dequeue();
+                    foreach (var w in Ext.GetNextMove(x, y))
+                    {
+                        if (!flag.Contains(w))
+                        {
+                            flag.Add(w);
+
+                            var c = _map[w.y, w.x];
+                            if (c == '#')
+                            {
+                                continue;
+                            }
+
+                            // there's a door, but key for it are on our "to collect" list
+                            if (char.IsUpper(c) && keys.Contains(char.ToLower(c)))
+                            {
+                                continue;
+                            }
+
+                            // there's a key and it's on our "collect list"
+                            if (char.IsLower(c) && keys.Contains(c))
+                            {
+                                k[c] = w;
+                            }
+                            else
+                            {
+                                q.Enqueue(w);
+                            }
+                        }
+                    }
+                }
+                return k;
+            }
+
+            int CollectKeys((int x, int y) position, List<char> keys)
+            {
+                if (keys.Count == 0)
+                {
+                    return 0;
+                }
+
+                var cacheKey = (position.x, position.y, string.Join(string.Empty, keys));
+                if (_cache.ContainsKey(cacheKey))
+                {
+                    return _cache[cacheKey];
+                }
+
+                var ans = int.MaxValue;
+                var reach = WalkAndCollect(position, keys);
+
+                foreach (var item in reach)
+                {
+                    var newkeys = keys.Where(x => x != item.Key).ToList();
+                    var d = LengthBetween(position, item.Value) + CollectKeys(item.Value, newkeys);
+                    ans = Math.Min(ans, d);
+                }
+
+                _cache[cacheKey] = ans;
+                return ans;
+            }
+
+            int LengthBetween((int x, int y) start, (int x, int y) end)
+            {
+                var prev = new Dictionary<(int x, int y), (int x, int y)>();
+                var flag = new HashSet<(int x, int y)>();
+                var q = new Queue<(int x, int y)>();
+
+                flag.Add(start);
+                q.Enqueue(start);
+
+                // perform BFS
+                while (q.Count > 0)
+                {
+                    var v = q.Dequeue();
+
+                    foreach (var w in Ext.GetNextMove(v.x, v.y))
+                    {
+                        // can't walk into wall
+                        if (_map[w.y, w.x] == '#')
+                        {
+                            continue;
+                        }
+
+                        if (!flag.Contains(w))
+                        {
+                            flag.Add(w);
+                            prev[w] = v;
+                            q.Enqueue(w);
+                        }
+                    }
+                }
+
+                var step = 1;
+                while (true)
+                {
+                    end = prev[end];
+
+                    if (end == start)
+                    {
+                        return step;
+                    }
+                    step++;
+                }
+            }
+
+            internal int Solve1Second() => CollectKeys(_starts[0], _allKeys);
+            #endregion
+
+            #region Part 2
             string GetKeysFromVault((int x, int y) start)
             {
                 var keys = new StringBuilder();
@@ -131,7 +263,7 @@ namespace aoc2019.Code
                 {
                     var current = q.Dequeue();
 
-                    foreach (var move in GetNextMove(current.x, current.y))
+                    foreach (var move in Ext.GetNextMove(current.x, current.y))
                     {
                         var c = _map[move.y, move.x];
 
@@ -151,23 +283,37 @@ namespace aoc2019.Code
 
                         visited.Add(move);
                         q.Enqueue(move);
-
                     }
                 }
                 return keys.ToString();
             }
+            #endregion
+
+            internal int Solve1() => USE_SECOND_VERSION ? CollectKeys(_starts[0], _allKeys) : Solve(_starts.First(), string.Empty);
 
             internal int Solve2()
             {
-                var v0 = GetKeysFromVault(_starts[0]);
-                var v1 = GetKeysFromVault(_starts[1]);
-                var v2 = GetKeysFromVault(_starts[2]);
-                var v3 = GetKeysFromVault(_starts[3]);
+                int solve0, solve1, solve2, solve3;
+                var keys = _starts.Select(GetKeysFromVault).ToList();
+                var v0 = keys[0];
+                var v1 = keys[1];
+                var v2 = keys[2];
+                var v3 = keys[3];
 
-                var solve0 = Solve(_starts[0], string.Join(string.Empty, v1, v2, v3).Trim());
-                var solve1 = Solve(_starts[1], string.Join(string.Empty, v0, v2, v3).Trim());
-                var solve2 = Solve(_starts[2], string.Join(string.Empty, v0, v1, v3).Trim());
-                var solve3 = Solve(_starts[3], string.Join(string.Empty, v0, v1, v2).Trim());
+                if (USE_SECOND_VERSION)
+                {
+                    solve0 = CollectKeys(_starts[0], v0.ToList());
+                    solve1 = CollectKeys(_starts[1], v1.ToList());
+                    solve2 = CollectKeys(_starts[2], v2.ToList());
+                    solve3 = CollectKeys(_starts[3], v3.ToList());
+                }
+                else
+                {
+                    solve0 = Solve(_starts[0], string.Join(string.Empty, v1, v2, v3));
+                    solve1 = Solve(_starts[1], string.Join(string.Empty, v0, v2, v3));
+                    solve2 = Solve(_starts[2], string.Join(string.Empty, v0, v1, v3));
+                    solve3 = Solve(_starts[3], string.Join(string.Empty, v0, v1, v2));
+                }
 
                 return solve0 + solve1 + solve2 + solve3;
             }

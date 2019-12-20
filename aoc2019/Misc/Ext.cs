@@ -81,5 +81,13 @@ namespace aoc2019.Misc
                 ++i;
             }
         }
+
+        public static IEnumerable<(int x, int y)> GetNextMove(int x, int y)
+        {
+            yield return (x - 1, y);
+            yield return (x + 1, y);
+            yield return (x, y - 1);
+            yield return (x, y + 1);
+        }
     }
 }
