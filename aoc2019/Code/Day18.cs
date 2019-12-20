@@ -8,143 +8,35 @@ namespace aoc2019.Code
 {
     public class Day18 : BaseDay
     {
-        //TODO: rethink and make it "work"
         class Map
         {
-            const int KEY_FOUND = 1;
-            const int KEY_NOT_FOUND = -1;
-
-            Dictionary<(int x, int y), char> _items;
-            Dictionary<char, (int x, int y)> _items2;
-            bool[,] _map;
-            (int x, int y) _start;
+            char[,] _map;
+            List<(int x, int y)> _starts;
+            Dictionary<(int x, int y, string keys), int> _cache;
 
             readonly int _width, _height;
 
             public Map(string[] lines)
             {
+                _cache = new Dictionary<(int x, int y, string keys), int>();
                 _width = lines[0].Length;
                 _height = lines.Length;
+                _starts = new List<(int x, int y)>();
 
-                _items = new Dictionary<(int x, int y), char>();
-                _items2 = new Dictionary<char, (int x, int y)>();
-                _map = new bool[_height, _width];
+                _map = new char[_height, _width];
 
                 for (var y = 0; y < _height; y++)
                 {
                     for (var x = 0; x < _width; x++)
                     {
                         var c = lines[y][x];
-                        switch (c)
+                        _map[y, x] = c;
+                        if (c == '@')
                         {
-                            case '#':
-                                _map[y, x] = true;
-                                break;
-
-                            case '@':
-                                _start = (x, y);
-                                break;
-
-                            case '.':
-                                break;
-
-                            default:
-                                _items[(x, y)] = c;
-                                _items2[c] = (x, y);
-                                break;
+                            _starts.Add((x, y));
                         }
                     }
                 }
-            }
-
-            void Each(Action<(int x, int y), bool> func)
-            {
-                for (int y = 0; y < _height; y++)
-                {
-                    for (int x = 0; x < _width; x++)
-                    {
-                        func((x, y), _map[y, x]);
-                    }
-                }
-            }
-
-            static Dictionary<string, int> _cacheCanWalk = new Dictionary<string, int>();
-
-            int CanWalk((int x, int y) start, char itemToCollect, Dictionary<(int x, int y), char> keys, bool checkKeys)
-            {
-                var dkey = checkKeys ? $"{start}-{itemToCollect}-{string.Join(string.Empty, keys.Select(kv => kv.Value))}" : null;
-                if (checkKeys && _cacheCanWalk.TryGetValue(dkey, out var r))
-                {
-                    return r;
-                }
-
-                var prev = new Dictionary<(int x, int y), (int x, int y)>();
-                var flag = new HashSet<(int x, int y)>();
-                var q = new Queue<(int x, int y)>();
-
-                flag.Add(start);
-                q.Enqueue(start);
-
-                // perform BFS
-                while (q.Count > 0)
-                {
-                    var v = q.Dequeue();
-
-                    foreach (var w in GetNextMove(v.x, v.y))
-                    {
-                        if (!flag.Contains(w))
-                        {
-                            flag.Add(w);
-
-                            if (_map[w.y, w.x] == true)
-                            {
-                                continue;
-                            }
-
-                            if (checkKeys)
-                            {
-                                // is there a key or door? treat our item as "empty" space                            
-                                var item = keys.GetValueOrDefault(w);
-                                if (item != 0 && item != itemToCollect)
-                                {
-                                    // that's not the key we're looking for, ignore
-                                    continue;
-                                }
-                                if (item == itemToCollect)
-                                {
-                                    // our key was found
-                                    _cacheCanWalk[dkey] = KEY_FOUND;
-                                    return KEY_FOUND;
-                                }
-                            }
-
-                            if (!checkKeys)
-                            {
-                                prev[w] = v;
-                            }
-                            q.Enqueue(w);
-                        }
-                    }
-                }
-                if (checkKeys)
-                {
-                    _cacheCanWalk[dkey] = KEY_NOT_FOUND;
-                    return KEY_NOT_FOUND;
-                }
-
-                // find length of shortest path
-                var end = _items2[itemToCollect];
-                foreach (var step in Enumerable.Range(1, int.MaxValue))
-                {
-                    end = prev[end];
-
-                    if (end == start)
-                    {
-                        return step;
-                    }
-                }
-
-                throw new InvalidProgramException();
             }
 
             static IEnumerable<(int x, int y)> GetNextMove(int x, int y)
@@ -155,75 +47,129 @@ namespace aoc2019.Code
                 yield return (x, y + 1);
             }
 
-            IEnumerable<string> Bla(string path, Dictionary<(int x, int y), char> keys)
+            Dictionary<char, (int x, int y, int level)> WalkNext((int x, int y) start, string keysCollected)
             {
-                if (keys.Count == 0)
+                var keys = new Dictionary<char, (int x, int y, int level)>();
+                var dist = new Dictionary<(int x, int y), int>();
+                var q = new Queue<(int x, int y)>();
+
+                q.Enqueue(start);
+                dist[start] = 0;
+
+                while (q.Any())
                 {
-                    yield return path;
-                }
+                    var current = q.Dequeue();
 
-                foreach (var next in keys)
-                {
-                    char startPoint = path.LastOrDefault();
-                    var startPos = startPoint == 0 ? _start : _items2[startPoint];
-
-                    char nextPoint = next.Value;
-                    var newPath = $"{path}{nextPoint}";
-
-                    if (IsValidPath(newPath) && CanWalk(startPos, nextPoint, keys, true) == KEY_FOUND)
+                    foreach (var move in GetNextMove(current.x, current.y))
                     {
-                        var newKeys = keys.ToDictionary(kv => kv.Key, kv => kv.Value);
-                        newKeys.Remove(next.Key);
+                        var c = _map[move.y, move.x];
 
-                        foreach (var item in Bla(newPath, newKeys))
+                        if (_map[move.y, move.x] == '#')
                         {
-                            yield return item;
+                            continue;
+                        }
+                        if (dist.ContainsKey(move))
+                        {
+                            continue;
+                        }
+                        dist[move] = dist[current] + 1;
+
+                        if (char.IsUpper(c) && !keysCollected.Contains(char.ToLower(c)))
+                        {
+                            continue;
+                        }
+                        if (char.IsLower(c) && !keysCollected.Contains(c))
+                        {
+                            keys[c] = (move.x, move.y, dist[move]);
+                        }
+                        else
+                        {
+                            q.Enqueue(move);
                         }
                     }
                 }
+                return keys;
             }
 
-            int GetPathLength(string path)
+            int Solve((int x, int y) start, string keys)
             {
-                var start = _start;
-                var length = 0;
-                foreach (var checkpoint in path)
+                var sorted = string.Join(string.Empty, keys.OrderBy(x => x));
+
+                if (_cache.TryGetValue((start.x, start.y, sorted), out var t))
                 {
-                    length += CanWalk(start, checkpoint, null, false);
-                    start = _items2[checkpoint];
+                    return t;
                 }
-                return length;
-            }
 
-            static bool IsValidPath(string path)
-            {
-                foreach (var door in path.Where(x => char.IsUpper(x)))
+                var steps = 0;
+                var whatnext = WalkNext(start, sorted);
+                if (whatnext.Any())
                 {
-                    var key = path.IndexOf(char.ToLower(door));
-                    if (key == -1 || key > door)
+                    var something = new List<int>();
+                    foreach (var item in whatnext)
                     {
-                        return false;
+                        something.Add(item.Value.level + Solve((item.Value.x, item.Value.y), $"{sorted}{item.Key}"));
                     }
-
+                    steps = something.Min();
                 }
-                return true;
+                _cache[(start.x, start.y, sorted)] = steps;
+
+                return steps;
             }
 
-            internal int Solve1()
-            {
-                var all = Bla(string.Empty, _items);
-                var min = int.MaxValue;
+            internal int Solve1() => Solve(_starts.First(), string.Empty);
 
-                foreach (var i in all)
+            string GetKeysFromVault((int x, int y) start)
+            {
+                var keys = new StringBuilder();
+                var visited = new HashSet<(int x, int y)>();
+                var q = new Queue<(int x, int y)>();
+
+                q.Enqueue(start);
+                visited.Add(start);
+
+                while (q.Any())
                 {
-                    var ans = GetPathLength(i);
-                    if (ans < min)
+                    var current = q.Dequeue();
+
+                    foreach (var move in GetNextMove(current.x, current.y))
                     {
-                        min = ans;
-                        Console.WriteLine($"Current min: {min}");
+                        var c = _map[move.y, move.x];
+
+                        if (_map[move.y, move.x] == '#')
+                        {
+                            continue;
+                        }
+                        if (visited.Contains(move))
+                        {
+                            continue;
+                        }
+
+                        if (char.IsLower(c))
+                        {
+                            keys.Append(c);
+                        }
+
+                        visited.Add(move);
+                        q.Enqueue(move);
+
                     }
                 }
-                return min;
+                return keys.ToString();
+            }
+
+            internal int Solve2()
+            {
+                var v0 = GetKeysFromVault(_starts[0]);
+                var v1 = GetKeysFromVault(_starts[1]);
+                var v2 = GetKeysFromVault(_starts[2]);
+                var v3 = GetKeysFromVault(_starts[3]);
+
+                var solve0 = Solve(_starts[0], string.Join(string.Empty, v1, v2, v3).Trim());
+                var solve1 = Solve(_starts[1], string.Join(string.Empty, v0, v2, v3).Trim());
+                var solve2 = Solve(_starts[2], string.Join(string.Empty, v0, v1, v3).Trim());
+                var solve3 = Solve(_starts[3], string.Join(string.Empty, v0, v1, v2).Trim());
+
+                return solve0 + solve1 + solve2 + solve3;
             }
         }
 
@@ -235,7 +181,9 @@ namespace aoc2019.Code
 
         public override string Part2()
         {
-            return string.Empty;
+            ReadInput("p2");
+
+            return new Map(ReadAllLines()).Solve2().ToString();
         }
     }
 }
