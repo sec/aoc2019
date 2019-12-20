@@ -14,20 +14,24 @@ namespace aoc2019.Code
 
         class Donut
         {
+            const int TELEPORT_MARK = 128;
+
             readonly int _teleportCounter = 0;
             readonly int _width;
             readonly int _height;
             readonly char[,] _map;
-            readonly Dictionary<string, (int index, List<(int x, int y)> waypoints)> _teleports;
+            readonly Dictionary<string, (int index, List<(int x, int y, bool outer)> waypoints)> _teleports;
 
-            bool InsideMap((int x, int y) pos) => !(pos.x < 0 || pos.x >= _width || pos.y < 0 || pos.y >= _height);
+            readonly char[] _solid = new[] { '#', ' ' };
+
+            (int x, int y, int level) _start, _end;
 
             public Donut(string[] data)
             {
                 _width = data[0].Length;
                 _height = data.Length;
                 _map = new char[_height, _width];
-                _teleports = new Dictionary<string, (int index, List<(int x, int y)> waypoints)>();
+                _teleports = new Dictionary<string, (int index, List<(int x, int y, bool outer)> waypoints)>();
 
                 for (int y = 0; y < _height; y++)
                 {
@@ -56,24 +60,29 @@ namespace aoc2019.Code
 
                             if (!_teleports.ContainsKey(name))
                             {
-                                _teleports[name] = (_teleportCounter++, new List<(int x, int y)>());
+                                _teleports[name] = (_teleportCounter++, new List<(int x, int y, bool outer)>());
                             }
 
-                            _teleports[name].waypoints.Add(point.Single());
+                            var pt = point.Single();
+                            var outer = pt.x == 2 || pt.y == 2 || pt.x == _width - 3 || pt.y == _height - 3;
+                            _teleports[name].waypoints.Add((pt.x, pt.y, outer));
 
-                            if (name == "AA")
+                            if (name == "AA" || name == "ZZ")
                             {
-                                _map[y, x] = '#';
-                            }
-                            else if (name == "ZZ")
-                            {
-                                _map[y, x] = 'X';
+                                _map[y, x] = _solid.First();
+                                if (name == "AA")
+                                {
+                                    _start = (pt.x, pt.y, 0);
+                                }
+                                else
+                                {
+                                    _end = (pt.x, pt.y, 0);
+                                }
                             }
                             else
                             {
-                                _map[y, x] = (char) (128 + _teleports[name].index);
+                                _map[y, x] = (char) (TELEPORT_MARK + _teleports[name].index);
                             }
-
                         }
                         else
                         {
@@ -81,7 +90,12 @@ namespace aoc2019.Code
                         }
                     }
                 }
+
+                _teleports.Remove("AA");
+                _teleports.Remove("ZZ");
             }
+
+            bool InsideMap((int x, int y) pos) => !(pos.x < 0 || pos.x >= _width || pos.y < 0 || pos.y >= _height);
 
             int BFS((int x, int y) start)
             {
@@ -100,13 +114,13 @@ namespace aoc2019.Code
                         var one = teleport.Value.waypoints.First();
                         var two = teleport.Value.waypoints.Last();
 
-                        if (one == current)
+                        if ((one.x, one.y) == current)
                         {
-                            nextMoves.Add(two);
+                            nextMoves.Add((two.x, two.y));
                         }
-                        else if (two == current)
+                        else if ((two.x, two.y) == current)
                         {
-                            nextMoves.Add(one);
+                            nextMoves.Add((one.x, one.y));
                         }
                     }
 
@@ -117,7 +131,7 @@ namespace aoc2019.Code
                             visited[w] = current;
 
                             var c = _map[w.y, w.x];
-                            if (c == '#' || c == ' ' || c == 'X' || c >= 128)
+                            if (_solid.Contains(c) || c >= TELEPORT_MARK)
                             {
                                 continue;
                             }
@@ -128,7 +142,7 @@ namespace aoc2019.Code
                 }
 
                 var step = 1;
-                var end = _teleports["ZZ"].waypoints.Single();
+                var end = (_end.x, _end.y);
 
                 while (true)
                 {
@@ -142,26 +156,110 @@ namespace aoc2019.Code
                 }
             }
 
-            public void Print()
+            private void AddTeleport(List<(int x, int y, int level)> nextMoves, int level, (int x, int y) current)
             {
-                for (int y = 0; y < _height; y++)
+                // inner are active and give +1
+                foreach (var teleport in _teleports)
                 {
-                    for (int x = 0; x < _width; x++)
+                    var one = teleport.Value.waypoints.First();
+                    var two = teleport.Value.waypoints.Last();
+
+                    if (one.outer == false && (one.x, one.y) == current)
                     {
-                        Console.Write(_map[y, x]);
+                        nextMoves.Add((two.x, two.y, level + 1));
                     }
-                    Console.WriteLine();
+                    if (two.outer == false && (two.x, two.y) == current)
+                    {
+                        nextMoves.Add((one.x, one.y, level + 1));
+                    }
+                }
+
+                if (level == 0)
+                {
+                    if ((_end.x, _end.y) == current)
+                    {
+                        nextMoves.Add(_end);
+                    }
+                }
+                else
+                {
+                    foreach (var teleport in _teleports)
+                    {
+                        var one = teleport.Value.waypoints.First();
+                        var two = teleport.Value.waypoints.Last();
+
+                        if (one.outer && (one.x, one.y) == current)
+                        {
+                            nextMoves.Add((two.x, two.y, level - 1));
+                        }
+                        if (two.outer && (two.x, two.y) == current)
+                        {
+                            nextMoves.Add((one.x, one.y, level - 1));
+                        }
+                    }
                 }
             }
 
-            public int Part1() => BFS(_teleports["AA"].waypoints.Single());
+            int BFS2((int x, int y) start, int startLevel)
+            {
+                var flag = new HashSet<(int x, int y, int level)>();
+                var q = new Queue<(int x, int y, int level)>();
+                var prev = new Dictionary<(int x, int y, int level), (int x, int y, int level)>();
+
+                flag.Add((start.x, start.y, startLevel));
+                q.Enqueue((start.x, start.y, startLevel));
+
+                while (q.Count > 0)
+                {
+                    var current = q.Dequeue();
+
+                    var nextMoves = Ext.GetNextMove(current.x, current.y).Select(pos => (pos.x, pos.y, current.level)).ToList();
+                    AddTeleport(nextMoves, current.level, (current.x, current.y));
+
+                    foreach (var w in nextMoves)
+                    {
+                        var c = _map[w.y, w.x];
+                        if (_solid.Contains(c) || c >= TELEPORT_MARK)
+                        {
+                            continue;
+                        }
+
+                        if (!flag.Contains(w))
+                        {
+                            flag.Add(w);
+                            prev[w] = current;
+                            q.Enqueue(w);
+
+                            if (w == _end)
+                            {
+                                var step = 1;
+                                var track = _end;
+
+                                while (true)
+                                {
+                                    track = prev[track];
+
+                                    if (track == (start.x, start.y, startLevel))
+                                    {
+                                        return step;
+                                    }
+                                    step++;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                throw new InvalidProgramException();
+            }
+
+            public int Part1() => BFS((_start.x, _start.y));
+
+            public int Part2() => BFS2((_start.x, _start.y), _start.level);
         }
 
         public override string Part1() => new Donut(ReadAllLines()).Part1().ToString();
 
-        public override string Part2()
-        {
-            return string.Empty;
-        }
+        public override string Part2() => new Donut(ReadAllLines()).Part2().ToString();
     }
 }
