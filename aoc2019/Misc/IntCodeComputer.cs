@@ -10,6 +10,7 @@ namespace aoc2019.Misc
         private readonly long[] _ram, _rom;
         private readonly Queue<long> _inputs;
         private long _pointer;
+        private bool _running;
 
         public IntCodeComputer(IEnumerable<long> code)
         {
@@ -53,8 +54,9 @@ namespace aoc2019.Misc
         {
             long index = 0;
             _pointer = 0;
+            _running = true;
 
-            while (true)
+            while (_running)
             {
                 var instr = _ram[index].ToString().PadLeft(5, '0');
 
@@ -167,5 +169,7 @@ namespace aoc2019.Misc
                 _ => throw new NotImplementedException(),
             };
         }
+
+        public void Terminate() => _running = false;
     }
 }
