@@ -38,7 +38,7 @@ namespace aoc2019.Code
         public override string Part1()
         {
             var moons = GetMoons().ToList();
-            var pairs = Ext.GetPermutations(moons, 2).Select(x => (x.First(), x.Last())).ToList();
+            var pairs = Ext.GetCombinations(moons, 2).Select(x => (x.First(), x.Last())).ToList();
             var steps = 1000;
 
             while (steps-- > 0)
@@ -53,7 +53,7 @@ namespace aoc2019.Code
         {
             var init = GetMoons().ToList();
             var moons = GetMoons().ToList();
-            var pairs = Ext.GetPermutations(moons, 2).Select(x => (x.First(), x.Last())).ToList();
+            var pairs = Ext.GetCombinations(moons, 2).Select(x => (x.First(), x.Last())).ToList();
             var cycles = new ulong[3];
 
             ulong steps = 0;
