@@ -99,5 +99,14 @@ namespace aoc2019.Misc
 
             return GetPermutations(list, length - 1).SelectMany(t => list.Where(e => !t.Contains(e)), (t1, t2) => t1.Concat(new T[] { t2 }));
         }
+
+        public static void AddLine(this Queue<long> q, string line)
+        {
+            foreach (var c in line)
+            {
+                q.Enqueue(c);
+            }
+            q.Enqueue(10);
+        }
     }
 }

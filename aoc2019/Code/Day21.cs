@@ -51,9 +51,9 @@ namespace aoc2019.Code
 
             foreach (var line in listing)
             {
-                AddLine(line, input);
+                input.AddLine(line);
             }
-            AddLine(runCode, input);
+            input.AddLine(runCode);
 
             comp.Run();
 
@@ -67,15 +67,6 @@ namespace aoc2019.Code
                 return true;
             }
             return false;
-        }
-
-        static void AddLine(string line, Queue<long> q)
-        {
-            foreach (var c in line)
-            {
-                q.Enqueue(c);
-            }
-            q.Enqueue(10);
         }
 
         IEnumerable<string> GenerateCode()
